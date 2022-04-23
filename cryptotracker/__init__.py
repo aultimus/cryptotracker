@@ -1,4 +1,4 @@
-import functools, os, requests, urllib.parse
+import functools, os, requests, statistics, urllib.parse
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from flask import Flask, jsonify
@@ -33,7 +33,41 @@ def fetch_pairs(exchange_name, api_key):
   # collect list of active pairs on this exchange
   for d in response_json["result"]:
     if d["active"]:
-      pairs[d["pair"]] = {}
+      pair_name = d["pair"]
+      try:
+        url = "https://api.cryptowat.ch/markets/{}/{}/ohlc?".format(exchange_name.lower(), pair_name)
+        if api_key:
+            params = {"apikey": api_key}
+            url = url + urllib.parse.urlencode(params)
+        response = requests.get(url, timeout=(3,10))
+        if response.status_code >= 300:
+          err = ""
+          try:
+            err = response_json["error"]
+          except KeyError:
+            pass
+          print("status:{}".format(response.status_code), "error:", err) # TODO: more sophisticated logging
+          # TODO: more sophisticated retry/backoff policy
+          return
+      except requests.exceptions.RequestException as e:
+        print(e)
+        continue
+      candles = response.json()["result"]["60"]
+      # candlestick response order:
+      # 0 CloseTime, 1 OpenPrice, 2 HighPrice, 3 LowPrice,
+      # 4 ClosePrice, 5 Volume, 6 QuoteVolume
+      volumes = [c[5] for c in candles]
+
+      if not pairs.get(pair_name):
+        pairs[pair_name] = {}
+      pairs[pair_name]["volumes"] = volumes
+      pairs[pair_name]["stddev"] =  statistics.stdev(volumes)
+      pairs[pair_name]["timeseries"] = [[c[0], c[4]] for c in candles]
+    
+  # sort into rank order
+  sorted(pairs.items(), key=lambda x: x["stddev"])
+  for pair in pairs:
+    print(pair, pair["stddev"])
 
 # TODO use production server e.g. waitress
 def create_app(test_config=None):
@@ -76,7 +110,7 @@ def create_app(test_config=None):
     def list_pairs():
       d = {"pairs":  list(pairs.keys())}
       return jsonify(d)
-      
+
     @app.route("/pairs/<name>", methods=["GET"])
     def get_pair(name):
       # TODO implement
