@@ -1,6 +1,12 @@
-import os
+import datetime, functools, os
+from apscheduler.schedulers.background import BackgroundScheduler
 
 from flask import Flask
+
+# TODO support multiple simultaneous exchanges
+def fetch_pairs(exchange_name):
+  # TODO: implement
+  print(datetime.datetime.now())
 
 # TODO use production server e.g. waitress
 def create_app(test_config=None):
@@ -9,6 +15,7 @@ def create_app(test_config=None):
     app.config.from_mapping(
         SECRET_KEY="dev", # TODO: override when going to prod
         EXCHANGE_NAME="KRAKEN",
+        FETCH_INTERVAL = 60,
     )
     
     if test_config is None:
@@ -24,6 +31,16 @@ def create_app(test_config=None):
     except OSError:
         pass
 
+    # prevent double scheduling when in debug mode
+    if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+      fetch_pairs(app.config.get("EXCHANGE_NAME"))
+      sched = BackgroundScheduler(daemon=True)
+      # TODO make interval a config value
+      bound_fetch_pairs = functools.partial(fetch_pairs,
+        app.config.get("EXCHANGE_NAME"))
+      sched.add_job(bound_fetch_pairs,"interval",
+        seconds=app.config.get("FETCH_INTERVAL"))
+      sched.start()
 
     @app.route("/pairs", methods=["GET"])
     def list_pairs():
