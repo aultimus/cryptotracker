@@ -10,10 +10,13 @@ from flask import Flask, jsonify
 pairs = {}
 
 # TODO support multiple simultaneous exchanges
+# TODO unit test processing logic
 def fetch_pairs(exchange_name, api_key):
   # seeing as we are only requesting data once per minute then we do not
   # need to utilise streaming
   # TODO: make timeout a config value
+  stddevs = {}
+
   try:
     url = "https://api.cryptowat.ch/markets/{}?".format(exchange_name.lower())
     if api_key:
@@ -61,13 +64,16 @@ def fetch_pairs(exchange_name, api_key):
       if not pairs.get(pair_name):
         pairs[pair_name] = {}
       pairs[pair_name]["volumes"] = volumes
-      pairs[pair_name]["stddev"] =  statistics.stdev(volumes)
+      stddevs[pair_name] = statistics.stdev(volumes)
       pairs[pair_name]["timeseries"] = [[c[0], c[4]] for c in candles]
-    
-  # sort into rank order
-  sorted(pairs.items(), key=lambda x: x["stddev"])
-  for pair in pairs:
-    print(pair, pair["stddev"])
+
+  # compute rank
+  stddevs = {k: v for k, v in sorted(stddevs.items(), key=lambda item: item[1])}
+  rank_count = 1
+  for name in stddevs.keys():
+    pairs[name]["rank"] = rank_count
+    rank_count += 1
+
 
 # TODO use production server e.g. waitress
 def create_app(test_config=None):
