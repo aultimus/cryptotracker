@@ -18,3 +18,12 @@ Example usage:
 The pairs/<pair> endpoint allows retrieving of historical and statistical data for a given pair.
 `curl localhost:5000/pairs/<pair_name>`
 where `pairname` is a value returned by the `/pairs` endpoint
+
+## TODO
+* exponential backoff / retry policy on HTTP errors
+* Add more sophisticated logging with levels
+* Add metrics - rate, error, duration of inbound and outbound HTTP requests
+* Add integration tests
+* Support user requesting data from specific exchange
+* Dockerise
+* Implement unit tests for parsing and processing of http responses
