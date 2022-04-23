@@ -1,16 +1,14 @@
-import functools, os, requests, statistics, urllib.parse
+import datetime, functools, os, requests, statistics, sqlite3, urllib.parse
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from flask import Flask, jsonify
 
 # TODO use production server e.g. waitress
 
-# TODO: use a database rather than this global state
-# read/writes to pairs could possibly be unthreadsafe
-pairs = {}
-
 # TODO support multiple simultaneous exchanges
 # TODO unit test processing logic
+# TODO: support only fetching data since last fetch as fetching every 24 hours
+# every minute is overkill
 def fetch_pairs(exchange_name, api_key):
   # seeing as we are only requesting data once per minute then we do not
   # need to utilise streaming
@@ -34,8 +32,13 @@ def fetch_pairs(exchange_name, api_key):
     return
 
   # collect list of active pairs on this exchange
+  i = 0
   for d in response_json["result"]:
-    if d["active"]:
+    if not d["active"]:
+      continue
+    with sqlite3.connect("cryptotracker.db") as con:
+      cur = con.cursor()
+      i+=1
       pair_name = d["pair"]
       try:
         url = "https://api.cryptowat.ch/markets/{}/{}/ohlc?".format(exchange_name.lower(), pair_name)
@@ -61,18 +64,22 @@ def fetch_pairs(exchange_name, api_key):
       # 4 ClosePrice, 5 Volume, 6 QuoteVolume
       volumes = [c[5] for c in candles]
 
-      if not pairs.get(pair_name):
-        pairs[pair_name] = {}
-      pairs[pair_name]["volumes"] = volumes
+      for c in candles:
+        cur.execute("INSERT INTO timeseries VALUES (NULL, ?, ?, ?)", (pair_name, c[0], c[4]))
+      con.commit()
+      
       stddevs[pair_name] = statistics.stdev(volumes)
-      pairs[pair_name]["timeseries"] = [[c[0], c[4]] for c in candles]
+      if i > 3:
+        break
 
   # compute rank
   stddevs = {k: v for k, v in sorted(stddevs.items(), key=lambda item: item[1])}
   rank_count = 1
   for name in stddevs.keys():
-    pairs[name]["rank"] = rank_count
+    cur.execute("INSERT OR REPLACE INTO ranks VALUES (?, ?)", (pair_name, rank_count))
     rank_count += 1
+  con.commit()
+  con.close()
 
 
 # TODO use production server e.g. waitress
@@ -100,37 +107,53 @@ def create_app(test_config=None):
         os.makedirs(app.instance_path)
     except OSError:
         pass
-
+    
+    with sqlite3.connect("cryptotracker.db") as con:
+      cur = con.cursor()
+      # TODO: init DB in schema file
+      cur.execute('''CREATE TABLE IF NOT EXISTS ranks (pair text primary key unique, rank integer)''')
+      cur.execute('''CREATE TABLE IF NOT EXISTS timeseries
+        (id integer primary key autoincrement NOT NULL, pair text, timestamp integer, value real)''')
+      con.commit()
     # prevent double scheduling when in debug mode
     if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
-      fetch_pairs(app.config.get("EXCHANGE_NAME"), public_key)
-      sched = BackgroundScheduler(daemon=True)
-      # TODO make interval a config value
       bound_fetch_pairs = functools.partial(fetch_pairs,
         app.config.get("EXCHANGE_NAME"), public_key)
+      bound_fetch_pairs()
+      sched = BackgroundScheduler(daemon=True)
+      # TODO make interval a config value
       sched.add_job(bound_fetch_pairs,"interval",
         seconds=app.config.get("FETCH_INTERVAL"))
       sched.start()
 
     @app.route("/pairs", methods=["GET"])
     def list_pairs():
-      d = {"pairs":  list(pairs.keys())}
-      return jsonify(d)
+      with sqlite3.connect("cryptotracker.db") as con:
+        cur = con.cursor()
+        pairs = cur.execute("SELECT pair FROM ranks").fetchall()
+        return jsonify({
+          "pairs": [pair[0] for pair in pairs]
+        })
 
     @app.route("/pairs/<name>", methods=["GET"])
     def get_pair(name):
-      # TODO implement
-      pair = pairs.get(name)
-      if not pair:
-        # TODO: set 404 status code
-        return jsonify({"error": "name {} not found".format(name)})
-      # TODO: use own data model rather than depending upon external format
-      output_json = {
-        "name": name,
-        "timeseries": pair["timeseries"],
-        "rank": pair["rank"],
-      }
-      return jsonify(output_json)
+      with sqlite3.connect("cryptotracker.db") as con:
+        cur = con.cursor()
+        rank = cur.execute("SELECT rank FROM ranks WHERE pair=?", (name,)).fetchone()
+
+        since_ts = (datetime.datetime.now() - datetime.timedelta(1)).timestamp()
+
+        timeseries = cur.execute("SELECT timestamp, value FROM timeseries WHERE pair=? AND timestamp > ?", (name, since_ts)).fetchall()
+        if not rank:
+          # TODO: set 404 status code
+          return jsonify({"error": "name {} not found".format(name)})
+        # TODO: use own data model rather than depending upon external format
+        output_json = {
+          "name": name,
+          "timeseries": timeseries,
+          "rank": rank[0],
+        }
+        return jsonify(output_json)
 
     return app
 

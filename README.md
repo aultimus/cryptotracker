@@ -60,3 +60,4 @@ where timeseries is an array of [timestamp (seconds since epoch), price].
 * Support user requesting data from specific exchange
 * Dockerise
 * Implement unit tests for parsing and processing of http responses
+* TODO: use postgres instead of sqlite
