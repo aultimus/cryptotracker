@@ -1,4 +1,4 @@
-import functools, os, requests
+import functools, os, requests, urllib.parse
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from flask import Flask, jsonify
@@ -10,12 +10,16 @@ from flask import Flask, jsonify
 pairs = {}
 
 # TODO support multiple simultaneous exchanges
-def fetch_pairs(exchange_name):
+def fetch_pairs(exchange_name, api_key):
   # seeing as we are only requesting data once per minute then we do not
   # need to utilise streaming
   # TODO: make timeout a config value
   try:
-   response = requests.get("https://api.cryptowat.ch/markets/{}".format(exchange_name.lower()), timeout=(3,10))
+    url = "https://api.cryptowat.ch/markets/{}?".format(exchange_name.lower())
+    if api_key:
+        params = {"apikey": api_key}
+        url = url + urllib.parse.urlencode(params)
+    response = requests.get(url, timeout=(3,10))
   except requests.exceptions.RequestException as e:
     print(e)
     return
@@ -30,12 +34,14 @@ def fetch_pairs(exchange_name):
   for d in response_json["result"]:
     if d["active"]:
       pairs[d["pair"]] = {}
-  print(pairs)
 
 # TODO use production server e.g. waitress
 def create_app(test_config=None):
     # create and configure the app
     app = Flask(__name__, instance_relative_config=True)
+
+    public_key = os.environ.get('CRYPTOWATCH_PUBLIC_KEY')
+
     app.config.from_mapping(
         SECRET_KEY="dev", # TODO: override when going to prod
         EXCHANGE_NAME="KRAKEN",
@@ -57,11 +63,11 @@ def create_app(test_config=None):
 
     # prevent double scheduling when in debug mode
     if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
-      fetch_pairs(app.config.get("EXCHANGE_NAME"))
+      fetch_pairs(app.config.get("EXCHANGE_NAME"), public_key)
       sched = BackgroundScheduler(daemon=True)
       # TODO make interval a config value
       bound_fetch_pairs = functools.partial(fetch_pairs,
-        app.config.get("EXCHANGE_NAME"))
+        app.config.get("EXCHANGE_NAME"), public_key)
       sched.add_job(bound_fetch_pairs,"interval",
         seconds=app.config.get("FETCH_INTERVAL"))
       sched.start()

@@ -5,6 +5,10 @@ cryptotracker is a RESTful webservice implemented in python using flask. You can
 cryptotracker can be ran in development mode via
 `./rundev.sh`
 
+you can set the environment variable `CRYPTOWATCH_PUBLIC_KEY` in order to use a
+cryptowatch api key with this service, not setting the env var will result in
+using the free api allowance.
+
 ## /pairs endpoint
 cryptotracker exposes the pairs endpoint which can be used to request a list of available pairs.
 Example usage:
