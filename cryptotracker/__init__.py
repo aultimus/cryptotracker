@@ -120,7 +120,17 @@ def create_app(test_config=None):
     @app.route("/pairs/<name>", methods=["GET"])
     def get_pair(name):
       # TODO implement
-      return name
+      pair = pairs.get(name)
+      if not pair:
+        # TODO: set 404 status code
+        return jsonify({"error": "name {} not found".format(name)})
+      # TODO: use own data model rather than depending upon external format
+      output_json = {
+        "name": name,
+        "timeseries": pair["timeseries"],
+        "rank": pair["rank"],
+      }
+      return jsonify(output_json)
 
     return app
 
