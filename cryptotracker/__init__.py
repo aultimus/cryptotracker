@@ -1,7 +1,9 @@
 import functools, os, requests
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from flask import Flask
+from flask import Flask, jsonify
+
+# TODO use production server e.g. waitress
 
 # TODO: use a database rather than this global state
 # read/writes to pairs could possibly be unthreadsafe
@@ -66,8 +68,8 @@ def create_app(test_config=None):
 
     @app.route("/pairs", methods=["GET"])
     def list_pairs():
-      # TODO: implement
-      return "list_pairs"
+      d = {"pairs":  list(pairs.keys())}
+      return jsonify(d)
       
     @app.route("/pairs/<name>", methods=["GET"])
     def get_pair(name):
