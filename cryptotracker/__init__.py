@@ -78,7 +78,8 @@ def fetch_pairs(exchange_name, api_key):
     with sqlite3.connect("cryptotracker.db") as con:
       cur = con.cursor()
       for c in candles:
-        cur.execute("INSERT INTO timeseries VALUES (NULL, ?, ?, ?)", (pair_name, c[0], c[4]))
+        cur.execute("""INSERT OR REPLACE INTO timeseries VALUES (NULL, ?, ?, ?)""",
+        (pair_name, c[0], c[4]))
       con.commit()
       
       volumes = [c[5] for c in candles]
@@ -126,7 +127,8 @@ def create_app(test_config=None):
       # TODO: init DB in schema file
       cur.execute('''CREATE TABLE IF NOT EXISTS ranks (pair text primary key unique, rank integer)''')
       cur.execute('''CREATE TABLE IF NOT EXISTS timeseries
-        (id integer primary key autoincrement NOT NULL, pair text, timestamp integer, value real)''')
+        (id integer primary key autoincrement NOT NULL, pair text, timestamp integer, value real,
+        CONSTRAINT UC_Timeseries UNIQUE (pair,timestamp))''')
       con.commit()
     # prevent double scheduling when in debug mode
     if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
