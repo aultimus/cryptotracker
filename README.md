@@ -1,6 +1,7 @@
 # cryptotracker
 
-cryptotracker is a RESTful webservice implemented in python using flask. You can use cryptotracker to request historical data about cryptocurrencies.
+cryptotracker is a RESTful webservice implemented in python using flask.
+You can use cryptotracker to request recent data about cryptocurrencies.
 
 cryptotracker can be ran in development mode via
 `./rundev.sh`
@@ -59,6 +60,19 @@ where timeseries is an array of [timestamp (seconds since epoch), price].
 * Add integration tests
 * Support user requesting data from specific exchange
 * Dockerise
-* Implement unit tests for parsing and processing of http responses
+* Implement unit tests for parsing and processing of http responses - mock out responses
 * TODO: use postgres instead of sqlite
 * TODO: add more async so requests dont hang whilst fetch_pairs is being executed
+
+## Feature Request
+Feature request: to help the user identify opportunities in real-time, the app will send
+an alert whenever a metric exceeds 3x the value of its average in the last 1 hour.
+For example, if the volume of GOLD/BTC averaged 100 in the last hour, the app
+would send an alert in case a new volume data point exceeds 300. Please write a
+short proposal on how you would implement this feature request.
+
+calculate hour volume averages every time we fetch data from cryptowatch. After
+we parse data if the latest volume value exceeds 3x the calculated average then
+send a notification. The notification could be implemented via using something
+like https://www.pubnub.com/ or https://www.twilio.com to send low latency push
+or sms messages which would likely be more noticeable than say email
