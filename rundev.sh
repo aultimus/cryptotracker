@@ -1,5 +1,5 @@
 #!/bin/bash
 export FLASK_APP=cryptotracker
 export FLASK_ENV=development
-pipenv shell
+source $(pipenv --venv)/bin/activate
 flask run
