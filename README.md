@@ -61,3 +61,4 @@ where timeseries is an array of [timestamp (seconds since epoch), price].
 * Dockerise
 * Implement unit tests for parsing and processing of http responses
 * TODO: use postgres instead of sqlite
+* TODO: add more async so requests dont hang whilst fetch_pairs is being executed

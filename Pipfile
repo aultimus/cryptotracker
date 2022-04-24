@@ -6,6 +6,8 @@ name = "pypi"
 [packages]
 flask = "*"
 apscheduler = "*"
+aiohttp = "*"
+asgiref = "*"
 
 [dev-packages]
 

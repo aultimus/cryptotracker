@@ -1,9 +1,30 @@
 import datetime, functools, os, requests, statistics, sqlite3, urllib.parse
 from apscheduler.schedulers.background import BackgroundScheduler
 
+import asyncio
+import aiohttp
+from asgiref import sync
+
+
 from flask import Flask, jsonify
 
 # TODO use production server e.g. waitress
+
+def async_aiohttp_get_all(urlpairs):
+    """
+    performs asynchronous get requests
+    """
+    async def get_all(urlpairs):
+        async with aiohttp.ClientSession() as session:
+            async def fetch(urlpair):
+                async with session.get(urlpair[1]) as response:
+                    return (urlpair[0], await response.json())
+            return await asyncio.gather(*[
+                fetch(urlpair) for urlpair in urlpairs
+            ])
+    # call get_all as a sync function to be used in a sync context
+    return sync.async_to_sync(get_all)(urlpairs)
+
 
 # TODO support multiple simultaneous exchanges
 # TODO unit test processing logic
@@ -13,8 +34,10 @@ def fetch_pairs(exchange_name, api_key):
   # seeing as we are only requesting data once per minute then we do not
   # need to utilise streaming
   # TODO: make timeout a config value
-  stddevs = {}
+  print("fetch_pairs started", datetime.datetime.now())
 
+  stddevs = {}
+  urlpairs = []
   try:
     url = "https://api.cryptowat.ch/markets/{}?".format(exchange_name.lower())
     if api_key:
@@ -31,54 +54,46 @@ def fetch_pairs(exchange_name, api_key):
     # TODO: more sophisticated retry/backoff policy
     return
 
-  # collect list of active pairs on this exchange
-  i = 0
   for d in response_json["result"]:
     if not d["active"]:
       continue
+    pair_name = d["pair"]
+    url = "https://api.cryptowat.ch/markets/{}/{}/ohlc?".format(exchange_name.lower(), pair_name)
+    # TODO: only request 60 period
+    #params = {"periods": [60,]}
+    if api_key:
+        params = {"apikey": api_key}
+        url = url + urllib.parse.urlencode(params)
+    urlpairs.append((pair_name,url))
+  
+  responses = async_aiohttp_get_all(urlpairs)
+  print("fetch_pairs fetched urls", datetime.datetime.now())
+
+  for response_pair in responses:
+    pair_name,response = response_pair
+    print(pair_name)
+    candles = response["result"]["60"]
+    # candlestick response order:
+    # 0 CloseTime, 1 OpenPrice, 2 HighPrice, 3 LowPrice,
+    # 4 ClosePrice, 5 Volume, 6 QuoteVolume
     with sqlite3.connect("cryptotracker.db") as con:
       cur = con.cursor()
-      i+=1
-      pair_name = d["pair"]
-      try:
-        url = "https://api.cryptowat.ch/markets/{}/{}/ohlc?".format(exchange_name.lower(), pair_name)
-        if api_key:
-            params = {"apikey": api_key}
-            url = url + urllib.parse.urlencode(params)
-        response = requests.get(url, timeout=(3,10))
-        if response.status_code >= 300:
-          err = ""
-          try:
-            err = response_json["error"]
-          except KeyError:
-            pass
-          print("status:{}".format(response.status_code), "error:", err) # TODO: more sophisticated logging
-          # TODO: more sophisticated retry/backoff policy
-          return
-      except requests.exceptions.RequestException as e:
-        print(e)
-        continue
-      candles = response.json()["result"]["60"]
-      # candlestick response order:
-      # 0 CloseTime, 1 OpenPrice, 2 HighPrice, 3 LowPrice,
-      # 4 ClosePrice, 5 Volume, 6 QuoteVolume
       for c in candles:
         cur.execute("INSERT INTO timeseries VALUES (NULL, ?, ?, ?)", (pair_name, c[0], c[4]))
       con.commit()
       
       volumes = [c[5] for c in candles]
       stddevs[pair_name] = statistics.stdev(volumes)
-      if i > 3:
-        break
 
-  # compute rank
-  stddevs = {k: v for k, v in sorted(stddevs.items(), key=lambda item: item[1])}
-  rank_count = 1
-  for name in stddevs.keys():
-    cur.execute("INSERT OR REPLACE INTO ranks VALUES (?, ?)", (pair_name, rank_count))
-    rank_count += 1
-  con.commit()
-  con.close()
+      # compute rank
+      stddevs = {k: v for k, v in sorted(stddevs.items(), key=lambda item: item[1])}
+      rank_count = 1
+      for name in stddevs.keys():
+        cur.execute("INSERT OR REPLACE INTO ranks VALUES (?, ?)", (pair_name, rank_count))
+        rank_count += 1
+      con.commit()
+
+  print("fetch_pairs ended", datetime.datetime.now())
 
 
 # TODO use production server e.g. waitress
