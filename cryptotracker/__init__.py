@@ -71,7 +71,6 @@ def fetch_pairs(exchange_name, api_key):
 
   for response_pair in responses:
     pair_name,response = response_pair
-    print(pair_name)
     candles = response["result"]["60"]
     # candlestick response order:
     # 0 CloseTime, 1 OpenPrice, 2 HighPrice, 3 LowPrice,
