@@ -62,12 +62,11 @@ def fetch_pairs(exchange_name, api_key):
       # candlestick response order:
       # 0 CloseTime, 1 OpenPrice, 2 HighPrice, 3 LowPrice,
       # 4 ClosePrice, 5 Volume, 6 QuoteVolume
-      volumes = [c[5] for c in candles]
-
       for c in candles:
         cur.execute("INSERT INTO timeseries VALUES (NULL, ?, ?, ?)", (pair_name, c[0], c[4]))
       con.commit()
       
+      volumes = [c[5] for c in candles]
       stddevs[pair_name] = statistics.stdev(volumes)
       if i > 3:
         break
