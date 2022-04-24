@@ -8,6 +8,7 @@ flask = "*"
 apscheduler = "*"
 aiohttp = "*"
 asgiref = "*"
+requests = "*"
 
 [dev-packages]
 
