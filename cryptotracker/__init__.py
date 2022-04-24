@@ -121,7 +121,7 @@ def create_app(test_config=None):
         os.makedirs(app.instance_path)
     except OSError:
         pass
-    
+    # TODO: move code out of create_app, it shouldn't be here
     with sqlite3.connect("cryptotracker.db") as con:
       cur = con.cursor()
       # TODO: init DB in schema file
