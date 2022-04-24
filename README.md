@@ -61,6 +61,7 @@ where timeseries is an array of [timestamp (seconds since epoch), price].
 
 ## TODO
 * exponential backoff / retry policy on HTTP errors
+* better error handling
 * Add more sophisticated logging with levels
 * Add metrics - rate, error, duration of inbound and outbound HTTP requests
 * Add integration tests
