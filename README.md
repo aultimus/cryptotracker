@@ -37,9 +37,10 @@ Example usage:
 ```
 
 ## /pairs/\<pair\> endpoint
-The pairs/<pair> endpoint allows retrieving of historical and statistical data for a given pair.
+The pairs/\<pair\> endpoint allows retrieving of historical and statistical data for a given pair.
 `curl localhost:5000/pairs/<pair_name>`
 where `pairname` is a value returned by the `/pairs` endpoint
+
 e.g.: `curl localhost:5000/pairs/btceur`
 ```
 {
